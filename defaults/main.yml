@@ -1,0 +1,45 @@
+---
+#
+# Package
+# See available releases: 
+#   https://docs.couchbase.com/server/6.0/install/ubuntu-debian-install.html#install-using-apt
+#
+couchbase_package_name: couchbase-server-community
+couchbase_package_version: 6.0.0-1693-1
+couchbase_deb_package_url: https://packages.couchbase.com/releases/couchbase-release/couchbase-release-1.0-6-amd64.deb
+couchbase_apt_package_name: "{{ couchbase_package_name }}={{ couchbase_package_version }}"
+
+#
+# Directories
+#
+couchbase_default_dir: /opt/couchbase
+couchbase_bin_dir: "{{ couchbase_default_dir }}/bin"
+couchbase_data_dir: /var/lib/couchbase/data
+couchbase_index_dir: /var/lib/couchbase/index
+couchbase_analytics_dir: /var/lib/couchbase/analytics
+couchbase_java_home_dir: /usr/lib/java/
+
+#
+# Network
+#
+couchbase_rest_port: 8091
+
+#
+# Settings
+#
+couchbase_data_service_ramsize_in_mb: 2048
+couchbase_index_service_ramsize_in_mb: 512
+couchbase_fts_service_ramsize_in_mb: 256
+
+#
+# Security
+#
+couchbase_admin_username: Administrator
+couchbase_admin_password: CHANGEME
+
+#
+# DON'T CHANGE THIS EXCEPT YOU KNOW WHAT YOU DO
+#
+# server group
+couchbase_cluster_members: "{{ groups['couchbase_all'] }}"
+couchbase_server_bootstrap_node: "{{ couchbase_cluster_members[0] }}"

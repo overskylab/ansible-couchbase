@@ -1,0 +1,110 @@
+---
+- include_tasks: couchbase_cluster_node_service.yml
+  loop: "{{ groups['couchbase_all'] }}"
+  loop_control:
+    loop_var: couchbase_host
+
+- name: Service(s) each node will be set to
+  debug:
+    msg: "{{ couchbase_node_services }}"
+  run_once: true
+
+- block: # Setup cluster
+  - name: Checks if cluster initialized
+    set_fact:
+      _couchbase_cluster_initialized: true
+    when: hostvars[item]["couchbase_join_node_flag"]
+    with_items: "{{ groups['couchbase_all'] }}"
+
+  - name: Set cluster initialized flag
+    set_fact:
+      couchbase_cluster_initialized: "{{ _couchbase_cluster_initialized|default(false) }}"
+
+  - name: Initializes a Couchbase Server cluster
+    shell: >
+      {{ couchbase_bin_dir }}/couchbase-cli
+      cluster-init
+      --cluster {{ couchbase_server_bootstrap_node }}:{{ couchbase_rest_port }}
+      --cluster-username {{ couchbase_admin_username }}
+      --cluster-password {{ couchbase_admin_password }}
+      --cluster-port {{ couchbase_rest_port }}
+      --cluster-ramsize {{ couchbase_data_service_ramsize_in_mb }}
+      --services {{ couchbase_node_services[couchbase_server_bootstrap_node] }}
+    delegate_to: "{{ couchbase_server_bootstrap_node }}"
+    run_once: true
+    when: not couchbase_cluster_initialized
+    register: _init_cluster
+  
+  - name: Checks if cluster initialization is success
+    set_fact:
+      couchbase_cluster_initialized: true
+    when: _init_cluster is success
+
+
+- block: # Add new node(s)
+  - name: Checks if cluster already configured
+    shell: >
+      {{ couchbase_bin_dir }}/couchbase-cli
+      server-list
+      --cluster {{ item }}:{{ couchbase_rest_port }}
+      --user {{ couchbase_admin_username }}
+      --password {{ couchbase_admin_password }}
+    loop: "{{ groups['couchbase_all'] }}"
+    failed_when: false
+    changed_when: false
+    register: _server_lists
+
+  - name: Adds new node into list
+    set_fact:
+      couchbase_server_new_nodes: "{{ couchbase_server_new_nodes|default([]) }} + [ '{{ item.item }}' ]"
+    when: item.rc != 0
+    loop: "{{ _server_lists.results }}"
+    no_log: true
+
+  - name: New node(s) will be added
+    debug:
+      msg: "{{couchbase_server_new_nodes}}"
+    when: couchbase_server_new_nodes is defined
+    run_once: true
+
+  - name: Picks a node from the existed cluster
+    set_fact:
+      couchbase_server_clustered_node: "{{ item.item }}"
+    when: item.rc == 0
+    loop: "{{ _server_lists.results }}"
+    no_log: true
+
+  - name: Adds a server to the cluster
+    shell: >
+      {{ couchbase_bin_dir }}/couchbase-cli
+      server-add
+      --cluster {{ couchbase_server_clustered_node }}:{{ couchbase_rest_port }}
+      --user {{ couchbase_admin_username }}
+      --password {{ couchbase_admin_password }}
+      --server-add {{ item }}:{{ couchbase_rest_port }}
+      --server-add-username {{ couchbase_admin_username }}
+      --server-add-password {{ couchbase_admin_password }}
+      --services {{ couchbase_node_services[item] }}
+    delegate_to: "{{ couchbase_server_clustered_node }}"
+    when:
+      - couchbase_cluster_initialized
+      - couchbase_node_services[item] is defined
+      - couchbase_node_services[item] | length > 0
+      - couchbase_server_new_nodes is defined
+    failed_when: "'ERROR' in _add_node_result.stdout"
+    loop: "{{ couchbase_server_new_nodes }}"
+    run_once: true
+    register: _add_node_result
+
+
+- name: Rebalances data and indexes across nodes in a cluster
+  shell: >
+    {{ couchbase_bin_dir }}/couchbase-cli
+    rebalance
+    --cluster {{ couchbase_server_clustered_node }}:{{ couchbase_rest_port }}
+    --user {{ couchbase_admin_username }}
+    --password {{ couchbase_admin_password }}
+  when: _add_node_result is changed
+  failed_when: "'ERROR' in _rebalance_result.stdout"
+  run_once: true
+  register: _rebalance_result

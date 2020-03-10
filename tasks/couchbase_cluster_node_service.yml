@@ -1,0 +1,39 @@
+---
+- block: # Set node services
+  - set_fact:
+      _couchbase_node_services: []
+
+  - name: Set data node service
+    set_fact:
+      _couchbase_node_services: "{{ _couchbase_node_services }} + [ 'data' ]"
+    when:
+      - groups['couchbase_data_service'] | default([]) | length > 0
+      - couchbase_host in groups['couchbase_data_service']
+
+  - name: Set index node service
+    set_fact:
+      _couchbase_node_services: "{{ _couchbase_node_services }} + [ 'index' ]"
+    when:
+      - groups['couchbase_index_service'] | default([]) | length > 0
+      - couchbase_host in groups['couchbase_index_service']
+
+  - name: Set query node service
+    set_fact:
+      _couchbase_node_services: "{{ _couchbase_node_services }} + [ 'query' ]"
+    when:
+      - groups['couchbase_query_service'] | default([]) | length > 0
+      - couchbase_host in groups['couchbase_query_service']
+
+  - name: Set fts (full text search) node service
+    set_fact:
+      _couchbase_node_services: "{{ _couchbase_node_services }} + [ 'fts' ]"
+    when:
+      - groups['couchbase_fts_service'] | default([]) | length > 0
+      - couchbase_host in groups['couchbase_fts_service']
+  
+  - set_fact:
+      _services: "{{ _couchbase_node_services|join(',') }}"
+
+  - name: Map services into node
+    set_fact:
+      couchbase_node_services: "{{ couchbase_node_services|default({}) | combine( { couchbase_host: _services } ) }}"

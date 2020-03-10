@@ -1,0 +1,76 @@
+---
+- name: Get major version
+  shell: cat "{{ couchbase_default_dir }}/VERSION.txt" | cut -d '.' -f1
+  failed_when: false
+  changed_when: false
+  register: _result
+
+- name: Set Couchbase major version
+  set_fact:
+    couchbase_major_version: "{{ _result.stdout }}"
+
+- name: Waiting for administrator rest port is ready
+  wait_for:
+    port: "{{ couchbase_rest_port }}"
+    msg: Timeout to reach port "{{ couchbase_rest_port }}"
+    timeout: 10
+    delay: 3
+
+
+- block: # Set conditional variables
+  - name: Check if cluster already configured
+    shell: >
+      {{ couchbase_bin_dir }}/couchbase-cli
+      server-list
+      --cluster {{ inventory_hostname }}:{{ couchbase_rest_port }}
+      --user {{ couchbase_admin_username }}
+      --password {{ couchbase_admin_password }}
+    failed_when: false
+    changed_when: false
+    register: _server_list
+
+  - name: Check if joined node
+    set_fact:
+      _couchbase_join_node_flag: false
+    when: _server_list.rc != 0
+
+  - name: Set joined node flag
+    set_fact:
+      couchbase_join_node_flag: "{{ _couchbase_join_node_flag|default(true) }}"
+
+  tags:
+    - always
+
+
+- name: Initialize a node for version 6 or later
+  shell: >
+    {{ couchbase_bin_dir }}/couchbase-cli
+    node-init
+    --cluster {{ inventory_hostname }}:{{ couchbase_rest_port }}
+    --user {{ couchbase_admin_username }}
+    --password {{ couchbase_admin_password }}
+    --node-init-hostname {{ inventory_hostname }}
+    --node-init-data-path {{ couchbase_data_dir }}
+    --node-init-index-path {{ couchbase_index_dir }}
+    --node-init-analytics-path {{ couchbase_analytics_dir }}
+  when:
+    - not couchbase_join_node_flag
+    - couchbase_major_version is version('6', '>=')
+  failed_when: "'ERROR' in couchbase_init_node.stdout"
+  register: couchbase_init_node
+
+- name: Initialize a node for version 5.5 or older
+  shell: >
+    {{ couchbase_bin_dir }}/couchbase-cli
+    node-init
+    --cluster {{ inventory_hostname }}:{{ couchbase_rest_port }}
+    --user {{ couchbase_admin_username }}
+    --password {{ couchbase_admin_password }}
+    --node-init-hostname {{ inventory_hostname }}
+    --node-init-data-path {{ couchbase_data_dir }}
+    --node-init-index-path {{ couchbase_index_dir }}
+  when:
+    - not couchbase_join_node_flag
+    - couchbase_major_version is version('6', '<')
+  failed_when: "'ERROR' in couchbase_init_node.stdout"
+  register: couchbase_init_node

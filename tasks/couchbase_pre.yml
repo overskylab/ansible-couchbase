@@ -1,0 +1,41 @@
+---
+- block: # Prepare user and group
+  - name: Add Couchbase group
+    group:
+      name: couchbase
+
+  - name: Add Couchbase user
+    user:
+      name: couchbase
+      group: couchbase
+      shell: /usr/sbin/nologin
+      home: "{{ couchbase_default_dir }}"
+
+
+- block: # Ensure directory created
+  - name: Ensure data directory created
+    file:
+      path: "{{ couchbase_data_dir }}"
+      state: directory
+      owner: couchbase
+      group: couchbase
+      mode: 0770
+    when: couchbase_data_dir is defined
+
+  - name: Ensure index directory created
+    file:
+      path: "{{ couchbase_index_dir }}"
+      state: directory
+      owner: couchbase
+      group: couchbase
+      mode: 0770
+    when: couchbase_index_dir is defined
+
+  - name: Ensure analytics directory created
+    file:
+      path: "{{ couchbase_analytics_dir }}"
+      state: directory
+      owner: couchbase
+      group: couchbase
+      mode: 0770
+    when: couchbase_analytics_dir is defined

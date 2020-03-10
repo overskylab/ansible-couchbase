@@ -1,0 +1,38 @@
+---
+- name: Install the meta package
+  apt:
+    deb: "{{ couchbase_deb_package_url }}"
+
+
+- block: # version handling
+  - name: Run Apt cache
+    apt:
+      update_cache: yes
+    register: _update_apt_cache
+    until: _update_apt_cache is success
+    retries: 5
+    delay: 2
+
+  - name: Check available releases
+    command: "apt list -a {{ couchbase_package_name }}"
+    changed_when: false
+    register: _available_version
+
+  - name: Show Couchbase available releases
+    debug:
+      msg: "{{ _available_version.stdout.split('\n') }}"
+    delegate_to: "{{ couchbase_server_bootstrap_node }}"
+    run_once: true
+
+
+- name: Install {{ couchbase_apt_package_name }} package
+  apt:
+    name: "{{ couchbase_apt_package_name }}"
+    update_cache: yes
+
+- name: Ensure Couchbase server started and running on startup
+  systemd:
+    name: couchbase-server
+    state: started
+    enabled: yes
+    daemon_reload: yes
